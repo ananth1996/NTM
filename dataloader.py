@@ -14,6 +14,7 @@ def copy_dataloader(num_seq, seq_width, min_seq_len,max_seq_len, device):
         max_seq_len {[type]} -- [description]
         device {[type]} -- [description]
     """
+    #TODO: Need to create a batched version
     for _ in range(num_seq):
         # The sequence length is random between min_seq_len and max_seq_len
         seq_len = random.randint(min_seq_len,max_seq_len)
