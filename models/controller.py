@@ -5,13 +5,16 @@ import torch.nn.functional as F
 
 #%%
 class Controller(nn.Module):
-    #TODO: Create batched version 
-    def __init__(self, num_inputs, controller_size, num_outputs, read_data_size):
+    """The LSTM controller for the NTM. It has an lstm cell that acts as working memory and also a fully connected layer to display output from the conroller.
+    
+    
+    """
+    def __init__(self, input_size, controller_size, output_size, read_data_size):
         super(Controller,self).__init__()
 
-        self.num_inputs      = num_inputs
+        self.num_inputs      = input_size
         self.controller_size = controller_size
-        self.num_outputs     = num_outputs
+        self.num_outputs     = output_size
         self.read_data_size  = read_data_size
 
         # The LSTM controller memory
@@ -39,26 +42,54 @@ class Controller(nn.Module):
         self.reset() 
     
     def forward(self, input_data, prev_reads):
+        """Performs a forward propagation of the LSTM controller 
+        
+        Args:
+            input_data (tensor): shape is (batch_size, input_size)
+            prev_reads (list of tensors): each list element is a read head's previous data ,shape (batch_size, M) 
+        
+        Returns:
+            hiiden_state,cell_state: The LSTM states
+        """ 
         # concatenate the input and the previous read data
-        x = torch.cat([input_data] +prev_reads,dim=1)
+        # (batch_size, input_size) + (batch_size, M) -> (batch_size, input_size +M)
+        x = torch.cat([input_data]+prev_reads,dim=1)
         self.lstm_h, self.lstm_c = self.lstm(x, (self.lstm_h,self.lstm_c))
 
         return self.lstm_h, self.lstm_c 
 
     def output(self, read_data):
+        """A function that produces the output of the controller given read data and current hidden state of the lstm 
+        
+        Args:
+            read_data (list of tensors): each read head's data stored in a list, shape (batch_size,M)
+        
+        Returns:
+            tensor : shape (batch_size, output_size)
+        """
         state = torch.cat([self.lstm_h]+read_data,dim=1)
         output = self.output_fc(state)
         output = F.sigmoid(output)
         return output
     
-    def reset(self):
+    # Will need to call this function from the NTM class
+    def reset(self, batch_size=1):
         in_data = torch.tensor([[0.]])  # dummy input
-        self.lstm_h= self.lstm_h_fc(in_data)
-        self.lstm_c  = self.lstm_c_fc(in_data)
+        lstm_h= self.lstm_h_fc(in_data)
+        self.lstm_h = lstm_h.repeat(batch_size,1)
+        lstm_c= self.lstm_c_fc(in_data)
+        self.lstm_c = lstm_c.repeat(batch_size,1)
+
 
 #%%
-        
-contr = Controller(10+20,100,8,120)
+if __name__ == "__main__":
+    input_size = 10
+    M = 20
+
+    output_size = 8
+    controller_size = 100
+
+    contr = Controller(input_size+M,controller_size,output_size,M+controller_size)
 
 
 
