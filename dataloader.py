@@ -35,6 +35,39 @@ def copy_dataloader(num_batches,batch_size,seq_width, min_seq_len,max_seq_len, d
 
         yield inp_seq,target_seq
 
+
+def repeat_copy_dataloader(num_batches, batch_size,seq_width, min_seq_len, max_seq_len, min_repeat, max_repeat ,device):
+        
+        for _ in range(num_batches):
+
+            # function and values for normalization 
+            reps_mean = (max_repeat + min_repeat) / 2
+            reps_var = (((max_repeat - min_repeat + 1) ** 2) - 1) / 12
+            reps_std = np.sqrt(reps_var)
+            def normalize(rep):
+                return (rep - reps_mean) / reps_std
+
+            # Sequence length is random between min and max 
+            seq_len = random.randint(min_seq_len,max_seq_len)
+            #Similar for number of repetitions
+            rep = random.randint(min_repeat,max_repeat)
+
+            seq = np.random.binomial(1,0.5, size=(seq_len,batch_size, seq_width))
+            seq = torch.from_numpy(seq).to(device)
+            # fill in input sequence, two bit longer and wider than target
+
+            input_seq = torch.zeros([seq_len + 2,batch_size, seq_width + 2]).to(device)
+            input_seq[0, :, seq_width] = 1.0  # input delimiter
+            input_seq[1:seq_len + 1,:, :seq_width] = seq
+            # Add the number of repetions required after normalizing 
+            input_seq[seq_len + 1, :, seq_width + 1] = normalize(rep)
+
+            target_seq = torch.zeros(
+                [seq_len * rep + 1,batch_size, seq_width + 1]).to(device)
+            target_seq[:seq_len * rep,:, :seq_width] = seq.repeat(rep, 1,1)
+            target_seq[seq_len * rep,:, seq_width] = 1.0  # output delimiter
+
+            yield input_seq,target_seq
 #%%
 if __name__ == "__main__":
     device = torch.device("cuda")
@@ -48,3 +81,11 @@ if __name__ == "__main__":
     a= next(d)
     print(a[0].shape,a[1].shape,a[0].device)
 #%% 
+    d = repeat_copy_dataloader(num_batches=2,batch_size=2,
+                               seq_width=8,min_seq_len=1,max_seq_len=10,
+                               min_repeat=1,max_repeat=10,device=device)
+    a = next(d)
+    print(a[0].shape,a[1].shape,a[0].device)
+    
+    a= next(d)
+    print(a[0].shape,a[1].shape,a[0].device)

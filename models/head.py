@@ -5,26 +5,28 @@ from torch import nn
 
 class Head(nn.Module):
 
-    def __init__(self, mode, controller_size, key_size):
+    def __init__(self, mode, controller_size, key_size,device):
         super().__init__()
+        
+        self.device = device
         
         self.mode = mode
         self.key_size = key_size
         
         # all the fc layers to produce scalars for memory addressing
-        self.key_fc = nn.Linear(controller_size, key_size)
-        self.key_strength_fc = nn.Linear(controller_size, 1)
+        self.key_fc = nn.Linear(controller_size, key_size).to(device)
+        self.key_strength_fc = nn.Linear(controller_size, 1).to(device)
 
         # these five fc layers cannot be in controller class
         # since each head has its own parameters and scalars
-        self.interpolation_gate_fc = nn.Linear(controller_size, 1)
-        self.shift_weighting_fc = nn.Linear(controller_size, 3)
-        self.sharpen_factor_fc = nn.Linear(controller_size, 1)
+        self.interpolation_gate_fc = nn.Linear(controller_size, 1).to(device)
+        self.shift_weighting_fc = nn.Linear(controller_size, 3).to(device)
+        self.sharpen_factor_fc = nn.Linear(controller_size, 1).to(device)
         # --(optional : for separation of add and erase mechanism)
         #self.erase_weight_fc = nn.Linear(controller_size, key_size)
 
         # fc layer to produce write data. data vector length=key_size
-        self.write_data_fc = nn.Linear(controller_size, key_size)
+        self.write_data_fc = nn.Linear(controller_size, key_size).to(device)
         self.reset()
 
     def forward(self, controller_state, prev_weights, memory, data=None):
@@ -74,7 +76,7 @@ class Head(nn.Module):
         # location-based addressing - interpolate, shift, sharpen
         interpolated_weights = g * content_weights + (1 - g) * prev_weights
         # print(f"interpolated weights: {interpolated_weights.shape}")
-        shifted_weights = self._circular_conv1d(interpolated_weights, s)
+        shifted_weights = self._circular_conv1d(interpolated_weights, s, self.device)
         # print(f"shifted weights: {shifted_weights.shape}")
         # the softmax introduces the exp of the argument which isn't there in
         # the paper. there it's just a simple normalization of the arguments.
@@ -84,8 +86,10 @@ class Head(nn.Module):
             current_weights, dim=1).view(-1, 1) + 1e-16)
 
         if self.mode == 'r':
+#             print("Read Head")
             data = memory.read(current_weights)
         elif self.mode == 'w':
+#             print("Write Head")
             #memory.write(current_weights, a, e)
             memory.write(current_weights, a)
         else:
@@ -95,7 +99,7 @@ class Head(nn.Module):
 
     
     @staticmethod
-    def _circular_conv1d(in_tensor, weights):
+    def _circular_conv1d(in_tensor, weights,device):
         # pad left with elements from right, and vice-versa
         # print("In circular convolution")
         # print(f"input tesnsor: {in_tensor.shape}")
@@ -121,7 +125,8 @@ class Head(nn.Module):
             t = torch.cat([w[-1:], w, w[:1]])
             c = F.conv1d(t.view(1, 1, -1), s.view(1, 1, -1)).view(-1)
             return c
-        result = torch.zeros(in_tensor.size())
+        
+        result = torch.zeros(in_tensor.size(),device=device)
         for b in range(batch_size):
             result[b] = _convolve(in_tensor[b], weights[b])
         return result

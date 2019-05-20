@@ -15,22 +15,25 @@ class NTM(nn.Module):
                  controller_size,
                  memory_units,
                  memory_unit_size,
-                 num_heads):
+                 num_heads,
+                device):
         super().__init__()
+        self.device = device
         self.controller_size = controller_size
         self.controller = Controller(
             input_size + num_heads * memory_unit_size, controller_size, output_size,
-            read_data_size=controller_size + num_heads * memory_unit_size)
+            read_data_size=controller_size + num_heads * memory_unit_size, 
+            device =self.device)
 
-        self.memory = Memory(memory_units, memory_unit_size)
+        self.memory = Memory(memory_units, memory_unit_size,self.device)
         self.memory_unit_size = memory_unit_size
         self.memory_units = memory_units
         self.num_heads = num_heads
         self.heads = nn.ModuleList([])
         for head in range(num_heads):
             self.heads += [
-                Head('r', controller_size, key_size=memory_unit_size),
-                Head('w', controller_size, key_size=memory_unit_size)
+                Head('r', controller_size, key_size=memory_unit_size,device = self.device),
+                Head('w', controller_size, key_size=memory_unit_size,device = self.device)
             ]
 
         self.prev_head_weights = []
@@ -42,11 +45,11 @@ class NTM(nn.Module):
         self.controller.reset(batch_size)
         self.prev_head_weights = []
         for i in range(len(self.heads)):
-            prev_weight = torch.zeros([batch_size, self.memory.n])
+            prev_weight = torch.zeros([batch_size, self.memory.n],device=self.device)
             self.prev_head_weights.append(prev_weight)
         self.prev_reads = []
         for i in range(self.num_heads):
-            prev_read = torch.zeros([batch_size, self.memory.m])
+            prev_read = torch.zeros([batch_size, self.memory.m],device=self.device)
             # using random initialization for previous reads
             nn.init.kaiming_uniform_(prev_read)
             self.prev_reads.append(prev_read)
@@ -72,7 +75,7 @@ class NTM(nn.Module):
         self.prev_head_weights = head_weights
         self.prev_reads = read_data
 
-        return output#, [h.clone().detach().numpy() for h in head_weights]
+        return output, [h.cpu().clone().detach().numpy() for h in head_weights]
     
 #%%
 

@@ -5,14 +5,15 @@ from torch import nn
 
 class Memory(nn.Module):
 
-    def __init__(self, memory_units, memory_unit_size):
+    def __init__(self, memory_units, memory_unit_size,device):
         super().__init__()
+        self.device=device
         self.n = memory_units
         self.m = memory_unit_size
-        self.memory = torch.zeros([1, self.n, self.m])
+        self.memory = torch.zeros([1, self.n, self.m],device=self.device)
         nn.init.kaiming_uniform_(self.memory)
         # layer to learn bias values for memory reset
-        self.memory_bias_fc = nn.Linear(1, self.n * self.m)
+        self.memory_bias_fc = nn.Linear(1, self.n * self.m).to(device)
         self.reset()
 
     def forward(self, *inputs):
@@ -104,7 +105,7 @@ class Memory(nn.Module):
     def reset(self, batch_size=1):
         # self.memory = torch.zeros([batch_size, self.n, self.m])
         # nn.init.kaiming_uniform_(self.memory)
-        in_data = torch.tensor([[0.]])  # dummy input
+        in_data = torch.tensor([[0.]],device=self.device)  # dummy input
         memory_bias = torch.sigmoid(self.memory_bias_fc(in_data))
         self.memory = memory_bias.view(self.n, self.m).repeat(batch_size, 1, 1)
         

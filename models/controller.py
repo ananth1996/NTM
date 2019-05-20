@@ -9,20 +9,22 @@ class Controller(nn.Module):
     
     
     """
-    def __init__(self, input_size, controller_size, output_size, read_data_size):
+    def __init__(self, input_size, controller_size, output_size, read_data_size, device):
         super().__init__()
 
+        self.device = device
+        
         self.num_inputs      = input_size
         self.controller_size = controller_size
         self.num_outputs     = output_size
         self.read_data_size  = read_data_size
 
         # The LSTM controller memory
-        self.lstm = nn.LSTMCell(self.num_inputs, self.controller_size)
+        self.lstm = nn.LSTMCell(self.num_inputs, self.controller_size).to(device)
 
         # The final Fully Connected layer that will tranform reads to outputs
         #  [controller_output; previous_reads ] -> output
-        self.output_fc = nn.Linear(self.read_data_size, self.num_outputs)
+        self.output_fc = nn.Linear(self.read_data_size, self.num_outputs).to(device)
         
         # initialize the fully connected network 
         nn.init.kaiming_uniform_(self.output_fc.weight)
@@ -31,12 +33,12 @@ class Controller(nn.Module):
         # The inital bias values for the hidden and cell state of the LSTM
         # these are meant to be reset after every input sequence
         # also they are mean to be learnt by the NTM
-        self.lstm_h = torch.zeros([1,self.controller_size])
-        self.lstm_c = torch.zeros([1,self.controller_size])
+        self.lstm_h = torch.zeros([1,self.controller_size],device = self.device)
+        self.lstm_c = torch.zeros([1,self.controller_size],device = self.device)
 
         # Networks that help learn the bias for the LSTM
-        self.lstm_h_fc = nn.Linear(1,self.controller_size)
-        self.lstm_c_fc = nn.Linear(1,self.controller_size)
+        self.lstm_h_fc = nn.Linear(1,self.controller_size).to(device)
+        self.lstm_c_fc = nn.Linear(1,self.controller_size).to(device)
 
         # Call the function that will reset the controller to bias values
         self.reset() 
@@ -53,6 +55,8 @@ class Controller(nn.Module):
         """ 
         # concatenate the input and the previous read data
         # (batch_size, input_size) + (batch_size, M) -> (batch_size, input_size +M)
+#         print(f"input_data :{input_data}")
+#         print(prev_reads)
         x = torch.cat([input_data]+prev_reads,dim=1)
         self.lstm_h, self.lstm_c = self.lstm(x, (self.lstm_h,self.lstm_c))
 
@@ -74,7 +78,7 @@ class Controller(nn.Module):
     
     # Will need to call this function from the NTM class
     def reset(self, batch_size=1):
-        in_data = torch.tensor([[0.]])  # dummy input
+        in_data = torch.tensor([[0.]],device=self.device)  # dummy input
         lstm_h= self.lstm_h_fc(in_data)
         self.lstm_h = lstm_h.repeat(batch_size,1)
         lstm_c= self.lstm_c_fc(in_data)
@@ -85,7 +89,7 @@ class Controller(nn.Module):
 if __name__ == "__main__":
     input_size = 10
     M = 20
-
+    device = torch.device("cpu")
     output_size = 8
     controller_size = 100
 
