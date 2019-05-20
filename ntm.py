@@ -5,7 +5,7 @@ from torch import nn
 from models.controller import Controller
 from models.head import Head
 from models.memory import Memory
-
+import numpy as np
 
 #%%
 class NTM(nn.Module):
@@ -72,16 +72,52 @@ class NTM(nn.Module):
         self.prev_head_weights = head_weights
         self.prev_reads = read_data
 
-        return output
+        return output#, [h.clone().detach().numpy() for h in head_weights]
     
 #%%
 
 if __name__ == "__main__":
     from dataloader import copy_dataloader
+    import matplotlib.pyplot as plt
+
+    def print_head(h):
+        h = np.array(h)
+        r = h[:,0,:,:]
+        w = h[:,1,:,:]
+        # plt.figure(figsize=(10,20))
+        plt.imshow(r.T.squeeze())
+        plt.title("Read Head locations")
+        plt.show()
+        # plt.figure(figsize=(10,20))
+        plt.imshow(w.T.squeeze())
+        plt.title("Write Head locations")
+        plt.show()
+    
+
     device = torch.device("cpu")
-    batch_size= 2
-    d = copy_dataloader(2,batch_size,8,1,20,device)
-    ntm = NTM(10,8,100,128,20,1)
-    ntm.reset(batch_size=2)
+    batch_size= 1
+    d = copy_dataloader(2,batch_size,8,20,20,device)
+    # ntm = NTM(10,8,100,128,20,1)
+    ntm = torch.load("checkpoints\i-9900_error_0.000e+00.pt")
+    ntm.reset(batch_size)
     x,y = next(d)
-    ntm(x[0])
+    h =[]
+    for i in range(x.size(0)):
+        input = x[i]
+        _,head = ntm(input)
+        h.append(head)
+    
+    outputs = torch.zeros(y.size())
+
+    print_head(h)
+
+    h=[]
+    zero_input = torch.zeros([batch_size,10])
+    for i in range(y.size(0)):
+        outputs[i],head = ntm(zero_input)
+        h.append(head)
+    
+    print_head(h)
+
+
+#%%
