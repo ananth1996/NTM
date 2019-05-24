@@ -68,6 +68,53 @@ def repeat_copy_dataloader(num_batches, batch_size,seq_width, min_seq_len, max_s
             target_seq[seq_len * rep,:, seq_width] = 1.0  # output delimiter
 
             yield input_seq,target_seq
+
+def associative_dataloader(num_batches, batch_size,item_width,item_length, min_item_count, max_item_count,device):
+    
+    for _ in range(num_batches):
+        num_item = random.randint(min_item_count,max_item_count)
+        
+        
+        # fill in input two bit wider than target to account for delimiter
+        # flags.
+        input_items = torch.zeros(
+            [(item_length + 1) * (num_item + 1) + 1, batch_size, item_width + 2])
+        for i in range(num_item):
+            item = np.random.binomial(1,0.5,size=(item_length,batch_size,item_width))
+            item = torch.from_numpy(item).to(device)
+            
+            input_items[(item_length + 1) * i, :,  item_width] = 1.0 # item delimiter 
+            input_items[(item_length + 1) * i + 1 :(item_length + 1)
+                        * (i + 1), : , :item_width] = item
+
+        # generate query item randomly
+        # in case of only one item, torch.randint throws error as num_item-1=0
+        query_item = 0
+        if num_item != 1:
+            query_item = random.randint(0,num_item-1)
+        query_seq = input_items[(item_length + 1) * query_item +
+                                1:(item_length + 1) * (query_item + 1), : , :item_width]
+        
+        input_items[(item_length + 1) * num_item, 
+                    : ,
+                    item_width + 1] = 1.0  # query delimiter
+        input_items[(item_length + 1) * num_item + 1:(item_length + 1)* (num_item + 1), 
+                    :,
+                    :item_width] = query_seq
+        input_items[(item_length + 1) * (num_item + 1), 
+                    :,
+                    item_width + 1] = 1.0  # query delimiter
+
+        # generate target sequences(item next to query in the input list)
+        target_item = torch.zeros([item_length,batch_size, item_width])
+        # in case of last item, target sequence is zero
+        if query_item != num_item - 1:
+            target_item[:item_length, :, :item_width] = input_items[
+                (item_length + 1) * (query_item + 1) + 1:(item_length + 1) * (query_item + 2),
+                :,
+                :item_width]
+
+        yield input_items, target_item
 #%%
 if __name__ == "__main__":
     device = torch.device("cuda")
@@ -84,6 +131,16 @@ if __name__ == "__main__":
     d = repeat_copy_dataloader(num_batches=2,batch_size=2,
                                seq_width=8,min_seq_len=1,max_seq_len=10,
                                min_repeat=1,max_repeat=10,device=device)
+    a = next(d)
+    print(a[0].shape,a[1].shape,a[0].device)
+    
+    a= next(d)
+    print(a[0].shape,a[1].shape,a[0].device)
+    
+    d = associative_dataloader(num_batches=2,batch_size=2,
+                               item_width=6,item_length=3,
+                               min_item_count=2, max_item_count=6,
+                               device=device)
     a = next(d)
     print(a[0].shape,a[1].shape,a[0].device)
     
